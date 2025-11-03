@@ -1,54 +1,83 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
-import CurrencyChart from "./CurrencyChart";
-import styles from "./Currency.module.css";
+import React, { useEffect, useState, useMemo } from 'react';
+import styles from './Currency.module.css';
+import CurrencyChart from './CurrencyChart';
+import { fetchCurrencyData } from './currencyService';
 
 const Currency = () => {
-  const [usdRate, setUsdRate] = useState({ rateBuy: 0, rateSell: 0 });
-  const [euroRate, setEuroRate] = useState({ rateBuy: 0, rateSell: 0 });
+  // rates: { USD: {purchase, sale}, EUR: {purchase, sale}, meta?: { eurUsd } }
+  const [rates, setRates] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchDataAndStore = async () => {
+    let mounted = true;
+
+    const load = async () => {
       try {
-        const response = await axios.get("https://api.monobank.ua/bank/currency");
-        const data = response.data;
-        const fetchTime = new Date().getTime();
-        localStorage.setItem("MONO", JSON.stringify({ data, fetchTime }));
+        setError(null);
+        const data = await fetchCurrencyData(); // folosește cache-ul dacă e proaspăt
+        if (!mounted) return;
 
-        const usd = data.find((item) => item.currencyCodeA === 840);
-        const eur = data.find((item) => item.currencyCodeA === 978);
-
-        if (usd) setUsdRate({ rateBuy: usd.rateBuy, rateSell: usd.rateSell });
-        if (eur) setEuroRate({ rateBuy: eur.rateBuy, rateSell: eur.rateSell });
-      } catch (error) {
-        console.error("Error fetching currency data:", error);
+        if (data) {
+          setRates(data);
+          // timestamp-ul e salvat de service în localStorage
+          const cached = localStorage.getItem('currencyData');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            setUpdatedAt(parsed.timestamp || null);
+          }
+        } else {
+          setError('Nu am putut prelua cursurile valutare.');
+        }
+      } catch (e) {
+        console.error(e);
+        setError('A apărut o eroare la preluarea cursurilor.');
       }
     };
 
-    const storedData = localStorage.getItem("MONO");
-    if (storedData) {
-      const { data, fetchTime } = JSON.parse(storedData);
-      const now = new Date().getTime();
-      if (now - fetchTime < 3600000) {
-        const usd = data.find((item) => item.currencyCodeA === 840);
-        const eur = data.find((item) => item.currencyCodeA === 978);
-
-        if (usd) setUsdRate({ rateBuy: usd.rateBuy, rateSell: usd.rateSell });
-        if (eur) setEuroRate({ rateBuy: eur.rateBuy, rateSell: eur.rateSell });
-        return;
-      }
-    }
-
-    fetchDataAndStore();
+    load();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const chartData = [
-    { name: "start", currency: 0, label: "" },
-    { name: "USD", currency: usdRate.rateBuy, label: usdRate.rateBuy?.toFixed(2) },
-    { name: "middle", currency: 0, label: "" },
-    { name: "EURO", currency: euroRate.rateBuy, label: euroRate.rateBuy?.toFixed(2) },
-    { name: "end", currency: 0, label: "" },
-  ];
+  const toNum = v =>
+    typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : 0;
+
+  const format2 = val => {
+    const n = toNum(val);
+    return n ? n.toFixed(2) : '-';
+  };
+
+  const chartData = useMemo(() => {
+    if (!rates) return [];
+    const usdBuy = toNum(rates.USD?.purchase);
+    const eurBuy = toNum(rates.EUR?.purchase);
+    return [
+      {
+        name: 'USD',
+        currency: usdBuy,
+        label: usdBuy ? usdBuy.toFixed(2) : '-',
+      },
+      {
+        name: 'EUR',
+        currency: eurBuy,
+        label: eurBuy ? eurBuy.toFixed(2) : '-',
+      },
+    ];
+  }, [rates]);
+
+  const formattedTs = useMemo(() => {
+    if (!updatedAt) return null;
+    try {
+      const d = new Date(updatedAt);
+      return d.toLocaleString();
+    } catch {
+      return null;
+    }
+  }, [updatedAt]);
+
+  const eurUsd = rates?.meta?.eurUsd ?? null;
 
   return (
     <div className={styles.currencyWrapper}>
@@ -60,21 +89,62 @@ const Currency = () => {
             <th className={styles.item}>Sale</th>
           </tr>
         </thead>
+
         <tbody>
           <tr className={styles.tr}>
             <td className={styles.item}>USD</td>
-            <td className={styles.item}>{usdRate.rateBuy?.toFixed(2)}</td>
-            <td className={styles.item}>{usdRate.rateSell?.toFixed(2)}</td>
+            <td className={styles.item}>
+              {rates?.USD?.purchase ? format2(rates.USD.purchase) : '-'}
+            </td>
+            <td className={styles.item}>
+              {rates?.USD?.sale ? format2(rates.USD.sale) : '-'}
+            </td>
           </tr>
           <tr className={styles.tr}>
             <td className={styles.item}>EUR</td>
-            <td className={styles.item}>{euroRate.rateBuy?.toFixed(2)}</td>
-            <td className={styles.item}>{euroRate.rateSell?.toFixed(2)}</td>
+            <td className={styles.item}>
+              {rates?.EUR?.purchase ? format2(rates.EUR.purchase) : '-'}
+            </td>
+            <td className={styles.item}>
+              {rates?.EUR?.sale ? format2(rates.EUR.sale) : '-'}
+            </td>
           </tr>
         </tbody>
       </table>
 
       <CurrencyChart data={chartData} />
+
+      {/* status + timestamp */}
+      <div
+        style={{
+          textAlign: 'center',
+          fontSize: 12,
+          opacity: 0.8,
+          padding: '6px 0 2px',
+        }}
+      >
+        {error ? (
+          <span style={{ color: '#ff6f61' }}>{error}</span>
+        ) : formattedTs ? (
+          <>Actualizat la: {formattedTs}</>
+        ) : (
+          <>Se încarcă…</>
+        )}
+      </div>
+
+      {/* opțional: arată EUR→USD dacă e expus de service */}
+      {eurUsd && (
+        <div
+          style={{
+            textAlign: 'center',
+            fontSize: 12,
+            opacity: 0.9,
+            paddingBottom: 10,
+          }}
+        >
+          1 EUR ≈ {Number(eurUsd).toFixed(4)} USD
+        </div>
+      )}
     </div>
   );
 };
