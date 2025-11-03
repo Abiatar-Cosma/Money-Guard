@@ -2,7 +2,7 @@
   "name": "moneyguard",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://renaerdelyi.github.io/MoneyGuard/",
+  "homepage": "https://Abiatar-Cosma.github.io/Money-Guard",
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",
     "@reduxjs/toolkit": "^2.6.1",
@@ -42,7 +42,9 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "lint:js": "eslint src/**/*.{js,jsx}"
+    "lint:js": "eslint src/**/*.{js,jsx}",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [
@@ -66,6 +68,7 @@
     "@types/babel__core": "^7.20.5",
     "@types/hoist-non-react-statics": "^3.3.6",
     "@types/react": "^19.1.0",
-    "@types/semver": "^7.7.0"
+    "@types/semver": "^7.7.0",
+    "gh-pages": "^6.3.0"
   }
 }
